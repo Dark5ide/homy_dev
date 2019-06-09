@@ -2,6 +2,8 @@
 
 #include "Homy_dev.h"
 
+int timer = 0;
+
 void setup(void)
 {
   pinMode(mdl1.pinNb, OUTPUT);
@@ -19,7 +21,10 @@ void setup(void)
   Serial.begin(115200);
 #endif
   DEBUGGING_L("");
-
+  DEBUGGING("");
+  DEBUGGING("");
+  
+  InitSHT31();
   WiFiConnect();
   MDNSSetup();
   MqttSetup();
@@ -32,8 +37,6 @@ void setup(void)
   Command("turn_on", &mdl1);
   Command("turn_on", &mdl2);
   Command("turn_on", &mdl3);
-  //DEBUG_LED(mdl1.pinNb, mdl1.state);
-  //DEBUG_LED(mdl2.pinNb, mdl2.state);
 }
 
 void loop(void)
@@ -57,5 +60,11 @@ void loop(void)
     httpServer.handleClient();
     //MDNS.update();
   }
-}
+  if (timer >= 50000)
+  {
+    GetDataSHT31(&mdl5);
+    timer = 0;
+  }
 
+  timer++;
+}

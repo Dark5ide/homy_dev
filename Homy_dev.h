@@ -7,6 +7,8 @@
 #include <WebSocketsServer.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include "Adafruit_SHT31.h"
 
 #ifdef DEBUG
 #define DEBUGGING(...) Serial.println( __VA_ARGS__ )
@@ -21,10 +23,10 @@
 
 
 /************ WIFI and MQTT Information (CHANGE THESE FOR YOUR SETUP) ******************/
-const char *ssid = "VOO-008975";
-const char *password = "PPKKXMTK";
-const char *mqtt_server = "192.168.0.20";
-const char *mqtt_backup_server = "test.mosquitto.org";
+const char *ssid = "yourSSID";
+const char *password = "yourPassword";
+const char *mqtt_server = "test.mosquitto.org";
+const char *mqtt_backup_server = "yourBackupServer";
 //const char* mqtt_username = "yourMQTTusername";
 //const char* mqtt_password = "yourMQTTpassword";
 const int mqtt_port = 1883;
@@ -36,36 +38,34 @@ typedef struct {
   String strType;
   String strName;
   int state;
+  String stateSensor;
 } Module;
 
-Module mdl0{-1, "lamp", "all", -1};
-Module mdl1{13, "lamp", "relay1", LOW}; // Pin Number and state initializtion for the mood lamp
-Module mdl2{12, "lamp", "relay2", LOW}; // Pin Number and state initializtion for the mood lamp
-Module mdl3{14, "lamp", "relay3", LOW}; // Pin Number and state initializtion for the bedside lamp
-Module mdl4{16, "lamp", "relay4", LOW}; // Pin Number and state initializtion for the bedside lamp
-//Module mdl3{4, "tv", "tv", -1}; // Pin Number and state initializtion for the tv
+Module mdl0{-1, "lamp", "all", -1, ""};
+Module mdl1{13, "lamp", "relay1", LOW, ""}; // Pin Number and state initializtion for the mood lamp
+Module mdl2{12, "lamp", "relay2", LOW, ""}; // Pin Number and state initializtion for the mood lamp
+Module mdl3{14, "lamp", "relay3", LOW, ""}; // Pin Number and state initializtion for the bedside lamp
+Module mdl4{16, "lamp", "relay4", LOW, ""}; // Pin Number and state initializtion for the bedside lamp
+Module mdl5{-1, "sensor", "sht31", -1, ""};
+//Module mdl3{4, "tv", "tv", -1, ""}; // Pin Number and state initializtion for the tv
 
 //const int led_ir = 4; // Pin number for IR LED
-#ifdef DEBUG
-//const int led = 13; // Led that indicates the server request
-#endif
-
 
 /************ MQTT TOPICS (change these topics as you wish) ****************************/
 const char *state_topic = "mycroft/homy/state";
 const char *cmd_topic = "mycroft/homy/cmd";
 
-#define NB_MDL 5
+#define NB_MDL 6
 const int self_id = 0;
 const char *self_name = "homy_dev";
-Module *self_module[NB_MDL] = {&mdl0, &mdl1, &mdl2, &mdl3, &mdl4};
+Module *self_module[NB_MDL] = {&mdl0, &mdl1, &mdl2, &mdl3, &mdl4, &mdl5};
 String on_cmd[] = {"turn_on", "switch_on", "power_on"};
 String off_cmd[] = {"turn_off", "switch_off", "power_off"};
 String toggle_cmd[] = {"toggle", "switch"};
 
 
 /************ FOR JSON *****************************************************************/
-const size_t bufferSize = JSON_ARRAY_SIZE(5) + 5*JSON_OBJECT_SIZE(3) + 180;
+const size_t bufferSize = JSON_ARRAY_SIZE(NB_MDL) + NB_MDL*JSON_OBJECT_SIZE(3) + 180;
 
 
 /************ WEB PAGE *****************************************************************/
@@ -92,6 +92,7 @@ String html =
     <p>PLUG 3 : <a href='led3?cmd=turn_on'><button name='led3_ON'><strong>ON</strong></button></a>\
     <a href='led3?cmd=turn_off'><button name='led3_OFF'><strong>OFF</strong></button></a>\
     <a href='led3?cmd=toggle'><button name='led3_toggle'><strong>TOGGLE</strong></button></a></p>\
+    <p>Sensor: %%SENSOR%%</p>\
     <br />\
     <p><a href='update'><button name='update'>UPDATE</button></a></p>\
   </body>\
@@ -107,10 +108,27 @@ ESP8266HTTPUpdateServer httpUpdater;
 //IRsend irsend(led_ir); //an IR led is connected to GPIO pin #4
 WiFiClient espClient;
 PubSubClient client(espClient);
-
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
+//////////////////////////////////////////////////////////
+//              Function Headers                        //
+//////////////////////////////////////////////////////////
+String StateToJson(void);
 //////////////////////////////////////////////////////////
 //                    Functions                         //
 //////////////////////////////////////////////////////////
+// SHT31 initialization
+void InitSHT31(void)
+{
+  if (!sht31.begin(0x44)) 
+  {
+    DEBUGGING("Couldn't find SHT31");
+    while(1) delay(1);
+  }
+  else
+  {
+    DEBUGGING("SHT31 sensor ready.");
+  }
+}
 // IR initialization
 /*void InitIR(void)
 {
@@ -152,7 +170,32 @@ void MDNSSetup()
   MDNS.addService("ws", "tcp", 81);
   MDNS.addService("http", "tcp", 80);
 }
+//////////////////////////////////////////////////////////
+//                    Sensor functions                  //
+//////////////////////////////////////////////////////////
+void GetDataSHT31(Module *sensor)
+{
+  String json_l;
+  float t = sht31.readTemperature();
+  float h = sht31.readHumidity();
 
+  if ((! isnan(t)) && (! isnan(h)))
+  {
+    Serial.print("Temp. *C = "); Serial.println(t);
+    Serial.print("Hum. % = "); Serial.println(h);
+    sensor->stateSensor = String("Temp. = " + String(t) + ";" + "Hum. = " + String(h));
+    json_l = StateToJson();
+
+    if(!client.publish(state_topic, json_l.c_str(), true))
+    {
+      DEBUGGING("Failed to publish!");
+    }
+  } 
+  else 
+  { 
+    Serial.println("Failed to read SHT31.");
+  }
+}
 
 //////////////////////////////////////////////////////////
 //                    Commands functions                //
@@ -281,38 +324,41 @@ int SearchModule(Module *mdls_p[], int mdl_nb_p, String mdl_p)
 
 String StateToJson(void)
 {
-  DynamicJsonBuffer jsonBuffer(bufferSize);
+  DynamicJsonDocument doc(bufferSize);
 
-  JsonObject& root = jsonBuffer.createObject();
+  doc["id"] = self_id;
+  doc["name"] = self_name;
 
-  root["id"] = self_id;
-  root["name"] = self_name;
+  JsonArray devices = doc.createNestedArray("devices");
+  devices.add(NB_MDL - 1);
 
-  JsonArray& devices = root.createNestedArray("devices");
-  devices.add(NB_MDL);
-
-  JsonObject& devices_1 = devices.createNestedObject();
+  JsonObject devices_1 = devices.createNestedObject();
   devices_1["type"] = mdl1.strType;
   devices_1["module"] = mdl1.strName;
   devices_1["state"] = mdl1.state;
 
-  JsonObject& devices_2 = devices.createNestedObject();
+  JsonObject devices_2 = devices.createNestedObject();
   devices_2["type"] = mdl2.strType;
   devices_2["module"] = mdl2.strName;
   devices_2["state"] = mdl2.state;
   
-  JsonObject& devices_3 = devices.createNestedObject();
+  JsonObject devices_3 = devices.createNestedObject();
   devices_3["type"] = mdl3.strType;
   devices_3["module"] = mdl3.strName;
   devices_3["state"] = mdl3.state;
 
-  JsonObject& devices_4 = devices.createNestedObject();
+  JsonObject devices_4 = devices.createNestedObject();
   devices_4["type"] = mdl4.strType;
   devices_4["module"] = mdl4.strName;
   devices_4["state"] = mdl4.state;
 
+  JsonObject devices_5 = devices.createNestedObject();
+  devices_5["type"] = mdl5.strType;
+  devices_5["module"] = mdl5.strName;
+  devices_5["state"] = mdl5.stateSensor;
+
   String message_l;
-  root.printTo(message_l);
+  serializeJson(doc, message_l);
 
   return message_l;
 }
@@ -324,25 +370,24 @@ bool DecodeJson(const char *msgJson)
   int index_mdl = 0;
   String str_mdl;
   String str_cmd;
-  DynamicJsonBuffer jsonBuffer(bufferSize);
-  JsonObject& root = jsonBuffer.parseObject(msgJson);
+  DynamicJsonDocument doc(bufferSize);
+  DeserializationError error = deserializeJson(doc, msgJson);
 
-
-  if (!root.success())
+  if (error)
   {
-    DEBUGGING("parseObject() failed");
+    DEBUGGING("deserializeJson() failed");
     return false;
   }
 
-  if ((!root.containsKey("name")) || (root.containsKey("name") && (strcmp(root["name"], self_name) != 0)))
+  if ((!doc.containsKey("name")) || (doc.containsKey("name") && (strcmp(doc["name"], self_name) != 0)))
   {
     DEBUGGING("The message is not intended for this device.");
     return false;
   }
 
-  if (root.containsKey("devices"))
+  if (doc.containsKey("devices"))
   {
-    JsonArray& devices = root["devices"];
+    JsonArray devices = doc["devices"];
     
     devices_nb = devices[0];
     for (i = 0; i < devices_nb; i++)
@@ -519,6 +564,7 @@ void HandleRoot(void)
   snprintf(temp, sizeof(temp), "%02d:%02d:%02d", hr, min % 60, sec % 60);
 
   to_send.replace("%%UPTIME%%", temp);
+  to_send.replace("%%SENSOR%%", mdl5.stateSensor);
   
   httpServer.send(200, "text/html", to_send);
   
@@ -603,4 +649,3 @@ void HTTPUpdateConnect()
   DEBUGGING_L(self_name);
   DEBUGGING(".local/update in your browser\n");
 }
-
