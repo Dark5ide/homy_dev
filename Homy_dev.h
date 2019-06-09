@@ -56,7 +56,7 @@ const char *state_topic = "mycroft/homy/state";
 const char *cmd_topic = "mycroft/homy/cmd";
 
 #define NB_MDL 6
-const int self_id = 0;
+const int self_id = 2;
 const char *self_name = "homy_dev";
 Module *self_module[NB_MDL] = {&mdl0, &mdl1, &mdl2, &mdl3, &mdl4, &mdl5};
 String on_cmd[] = {"turn_on", "switch_on", "power_on"};
