@@ -181,9 +181,9 @@ void GetDataSHT31(Module *sensor)
 
   if ((! isnan(t)) && (! isnan(h)))
   {
-    Serial.print("Temp. *C = "); Serial.println(t);
-    Serial.print("Hum. % = "); Serial.println(h);
-    sensor->stateSensor = String("Temp. = " + String(t) + ";" + "Hum. = " + String(h));
+    DEBUGGING_L("Temp. = "); DEBUGGING_L(t); DEBUGGING("[*C]");
+    DEBUGGING_L("Hum.  = "); DEBUGGING_L(h); DEBUGGING("[%]");
+    sensor->stateSensor = String("Temp. = " + String(t) + "[*C];" + "Hum. = " + String(h) + "[%]");
     json_l = StateToJson();
 
     if(!client.publish(state_topic, json_l.c_str(), true))
@@ -324,6 +324,7 @@ int SearchModule(Module *mdls_p[], int mdl_nb_p, String mdl_p)
 
 String StateToJson(void)
 {
+  int i = 1;
   DynamicJsonDocument doc(bufferSize);
 
   doc["id"] = self_id;
@@ -332,30 +333,20 @@ String StateToJson(void)
   JsonArray devices = doc.createNestedArray("devices");
   devices.add(NB_MDL - 1);
 
-  JsonObject devices_1 = devices.createNestedObject();
-  devices_1["type"] = mdl1.strType;
-  devices_1["module"] = mdl1.strName;
-  devices_1["state"] = mdl1.state;
-
-  JsonObject devices_2 = devices.createNestedObject();
-  devices_2["type"] = mdl2.strType;
-  devices_2["module"] = mdl2.strName;
-  devices_2["state"] = mdl2.state;
-  
-  JsonObject devices_3 = devices.createNestedObject();
-  devices_3["type"] = mdl3.strType;
-  devices_3["module"] = mdl3.strName;
-  devices_3["state"] = mdl3.state;
-
-  JsonObject devices_4 = devices.createNestedObject();
-  devices_4["type"] = mdl4.strType;
-  devices_4["module"] = mdl4.strName;
-  devices_4["state"] = mdl4.state;
-
-  JsonObject devices_5 = devices.createNestedObject();
-  devices_5["type"] = mdl5.strType;
-  devices_5["module"] = mdl5.strName;
-  devices_5["state"] = mdl5.stateSensor;
+  for (i = 1; i < NB_MDL; i++)
+  {
+    JsonObject devices_n = devices.createNestedObject();
+    devices_n["type"] = self_module[i]->strType;
+    devices_n["module"] = self_module[i]->strName;
+    if (strcmp(self_module[i]->strType.c_str(), "sensor") == 0)
+    {
+      devices_n["state"] = self_module[i]->stateSensor;
+    }
+    else
+    {
+      devices_n["state"] = self_module[i]->state;
+    }
+  }
 
   String message_l;
   serializeJson(doc, message_l);
