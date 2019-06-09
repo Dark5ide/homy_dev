@@ -20,6 +20,8 @@ Arduino libreries needed :
 #include <WebSocketsServer.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include "Adafruit_SHT31.h"
 ```
 
 To use JSON message, I had to change from
