@@ -60,7 +60,7 @@ void loop(void)
     httpServer.handleClient();
     //MDNS.update();
   }
-  if (timer >= 50000)
+  if (timer >= 100000)
   {
     GetDataSHT31(&mdl5);
     timer = 0;

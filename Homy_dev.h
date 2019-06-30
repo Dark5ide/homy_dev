@@ -23,10 +23,10 @@
 
 
 /************ WIFI and MQTT Information (CHANGE THESE FOR YOUR SETUP) ******************/
-const char *ssid = "yourSSID";
-const char *password = "yourPassword";
-const char *mqtt_server = "test.mosquitto.org";
-const char *mqtt_backup_server = "yourBackupServer";
+const char *ssid = "VOO-008975";
+const char *password = "PPKKXMTK";
+const char *mqtt_server = "192.168.0.41";
+const char *mqtt_backup_server = "192.168.0.20";
 //const char* mqtt_username = "yourMQTTusername";
 //const char* mqtt_password = "yourMQTTpassword";
 const int mqtt_port = 1883;
@@ -97,9 +97,6 @@ String html =
     <p><a href='update'><button name='update'>UPDATE</button></a></p>\
   </body>\
 </html>";
-
-
-
 
 
 WebSocketsServer webSocket = WebSocketsServer(81);
@@ -400,38 +397,41 @@ bool DecodeJson(const char *msgJson)
 // MQTT Connect
 void MqttConnect(void)
 {
-    DEBUGGING("Attempting MQTT connection...");
-    // Attempt to connect
-    if (client.connect("ESP8266_Client"))
+  static char *broker = (char *) mqtt_server;
+  DEBUGGING("Attempting MQTT connection...");
+  // Attempt to connect
+  if (client.connect("ESP8266_Client"))
+  {
+    DEBUGGING_L("connected to broker : ");
+    DEBUGGING(broker);
+    // Publish he is alive
+    if (!client.publish(state_topic, "MQTT - OK"))
     {
-      DEBUGGING("connected");
-      // Publish he is alive
-      if (!client.publish(state_topic, "MQTT - OK"))
-      {
-        DEBUGGING("Failed to publish at reconnection");
-      }
-      // ... and subscribe to topic
-      client.subscribe(cmd_topic);
+      DEBUGGING("Failed to publish at reconnection");
+    }
+    // ... and subscribe to topic
+    client.subscribe(cmd_topic);
+  }
+  else
+  {
+    // Try to connect to the server 3 times
+    // before switching to the backup server
+    if (mqtt_conn_try < 3)
+    {
+      mqtt_conn_try++;
+      DEBUGGING_L("failed, rc=");
+      DEBUGGING_L(client.state());
+      DEBUGGING(" try again in 3 seconds");
+      // Wait 3 seconds before retrying
+      delay(3000);
     }
     else
     {
-      // Try to connect to the server 3 times
-      // before switching to the backup server
-      if (mqtt_conn_try < 3)
-      {
-        mqtt_conn_try++;
-        DEBUGGING_L("failed, rc=");
-        DEBUGGING_L(client.state());
-        DEBUGGING(" try again in 5 seconds");
-        // Wait 5 seconds before retrying
-        delay(5000);
-      }
-      else
-      {
-        mqtt_conn_try = 0;
-        client.setServer(mqtt_backup_server, mqtt_port);
-      }
+      mqtt_conn_try = 0;
+      client.setServer(mqtt_backup_server, mqtt_port);
+      broker = (char *) mqtt_backup_server;
     }
+  }
 }
 
 // mqtt callback
