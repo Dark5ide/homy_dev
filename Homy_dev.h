@@ -400,12 +400,12 @@ void MqttConnect(void)
   static char *broker = (char *) mqtt_server;
   DEBUGGING("Attempting MQTT connection...");
   // Attempt to connect
-  if (client.connect("ESP8266_Client"))
+  if (client.connect(self_name))
   {
     DEBUGGING_L("connected to broker : ");
     DEBUGGING(broker);
     // Publish he is alive
-    if (!client.publish(state_topic, "MQTT - OK"))
+    if (!client.publish(state_topic, "{\"MQTT\": \"OK\"}"))
     {
       DEBUGGING("Failed to publish at reconnection");
     }
