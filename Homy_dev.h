@@ -23,10 +23,10 @@
 
 
 /************ WIFI and MQTT Information (CHANGE THESE FOR YOUR SETUP) ******************/
-const char *ssid = "VOO-008975";
-const char *password = "PPKKXMTK";
-const char *mqtt_server = "192.168.0.41";
-const char *mqtt_backup_server = "192.168.0.20";
+const char *ssid = "yourSSID";
+const char *password = "yourPassword";
+const char *mqtt_server = "yourServer";
+const char *mqtt_backup_server = "yourBackupServer";
 //const char* mqtt_username = "yourMQTTusername";
 //const char* mqtt_password = "yourMQTTpassword";
 const int mqtt_port = 1883;
