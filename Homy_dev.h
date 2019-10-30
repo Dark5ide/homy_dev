@@ -190,7 +190,7 @@ void GetDataSHT31(Module *sensor)
   } 
   else 
   { 
-    Serial.println("Failed to read SHT31.");
+    DEBUGGING("Failed to read SHT31.");
   }
 }
 
